@@ -5,6 +5,7 @@ from othello.OthelloPlayers import *
 from othello.pytorch.NNet import NNetWrapper as NNet
 
 
+
 import numpy as np
 from utils import *
 

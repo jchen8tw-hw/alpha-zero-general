@@ -8,15 +8,21 @@ import sys
 sys.path.append('..')
 
 
-class OthelloNNet(nn.Module):
+class EwnNNet(nn.Module):
     def __init__(self, game, args):
         # game params
-        self.board_x, self.board_y = game.getBoardSize()
+        self.board_x, self.board_y, self.board_z = game.getBoardSize()
         self.action_size = game.getActionSize()
         self.args = args
 
-        super(OthelloNNet, self).__init__()
-        self.conv1 = nn.Conv2d(1, args.num_channels, 3, stride=1, padding=1)
+        super(EwnNNet, self).__init__()
+        # each cube has a layer
+        self.conv1 = nn.Conv2d(
+            self.board_z,
+            args.num_channels,
+            3,
+            stride=1,
+            padding=1)
         self.conv2 = nn.Conv2d(
             args.num_channels,
             args.num_channels,
@@ -39,8 +45,9 @@ class OthelloNNet(nn.Module):
         self.bn3 = nn.BatchNorm2d(args.num_channels)
         self.bn4 = nn.BatchNorm2d(args.num_channels)
 
+        # add the input of dice_roll(cube_num)
         self.fc1 = nn.Linear(args.num_channels *
-                             (self.board_x - 4) * (self.board_y - 4), 1024)
+                             (self.board_x - 4) * (self.board_y - 4) + game.ewn.cube_num, 1024)
         self.fc_bn1 = nn.BatchNorm1d(1024)
 
         self.fc2 = nn.Linear(1024, 512)
@@ -50,10 +57,12 @@ class OthelloNNet(nn.Module):
 
         self.fc4 = nn.Linear(512, 1)
 
-    def forward(self, s):
-        # s: batch_size x board_x x board_y
-        # batch_size x 1 x board_x x board_y
-        s = s.view(-1, 1, self.board_x, self.board_y)
+    def forward(self, s, dice_roll):
+        # s: batch_size x board_x x board_y x board_z
+
+        # s = s.view(-1, self.board_z, self.board_x, self.board_y)
+        # batch_size x self.board_z x board_x x board_y
+        s = s.permute(0, 3, 1, 2)
         # batch_size x num_channels x board_x x board_y
         s = F.relu(self.bn1(self.conv1(s)))
         # batch_size x num_channels x board_x x board_y
@@ -64,6 +73,9 @@ class OthelloNNet(nn.Module):
         s = F.relu(self.bn4(self.conv4(s)))
         s = s.view(-1, self.args.num_channels *
                    (self.board_x - 4) * (self.board_y - 4))
+
+        # add the input of dice_roll(cube_num)
+        s = torch.cat((s, dice_roll), dim=1)
 
         s = F.dropout(
             F.relu(
